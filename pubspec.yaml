@@ -38,9 +38,9 @@ dependencies:
     sdk: flutter
   intl: ^0.20.2  # UPDATED VERSION
   
-  # Authentication (if using Firebase)
-  firebase_core: ^2.24.2
-  firebase_auth: ^4.16.0
+  # # Authentication (if using Firebase)
+  # firebase_core: ^2.24.2
+  # firebase_auth: ^4.16.0
   
   # PDF generation (for reports)
   pdf: ^3.10.7
