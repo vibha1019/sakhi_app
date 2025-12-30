@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'config/theme.dart';
 import 'config/routes.dart';
 import 'providers/user_provider.dart';
+import 'providers/language_provider.dart';
 
 void main() {
   runApp(const MicroMitraApp());
@@ -16,6 +17,7 @@ class MicroMitraApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => UserProvider()),
+        ChangeNotifierProvider(create: (_) => LanguageProvider()),
       ],
       child: MaterialApp(
         title: 'MicroMitra',

@@ -6,6 +6,7 @@ import '../screens/home/home_screen.dart';
 import '../screens/pricing/pricing_calculator_screen.dart';
 import '../screens/marketing/marketing_generator_screen.dart';
 import '../screens/finance/finance_tracker_screen.dart';
+import '../screens/test/voice_test_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -15,6 +16,7 @@ class AppRoutes {
   static const String pricing = '/pricing';
   static const String marketing = '/marketing';
   static const String finance = '/finance';
+  static const String voiceTest = '/voice-test'; // ADD THIS
 
   static Map<String, WidgetBuilder> get routes {
     return {
@@ -25,6 +27,7 @@ class AppRoutes {
       pricing: (context) => const PricingCalculatorScreen(),
       marketing: (context) => const MarketingGeneratorScreen(),
       finance: (context) => const FinanceTrackerScreen(),
+      voiceTest: (context) => const VoiceTestScreen(), // ADD THIS
     };
   }
 }

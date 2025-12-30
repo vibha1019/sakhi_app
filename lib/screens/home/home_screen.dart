@@ -109,6 +109,15 @@ class HomeScreen extends StatelessWidget {
                         );
                       },
                     ),
+                    _FeatureCard(
+                      title: '🎤 Test Voice',
+                      description: 'Test voice input',
+                      icon: Icons.bug_report,
+                      color: Colors.orange,
+                      onTap: () {
+                        Navigator.pushNamed(context, '/voice-test');
+                      },
+                    ),
                   ],
                 ),
               ),
