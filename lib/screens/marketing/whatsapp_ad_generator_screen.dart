@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:url_launcher/url_launcher.dart'; // NEW: Import this
 import 'package:micromitra/services/marketing_ai_service.dart';
 
 class WhatsAppAdGeneratorScreen extends StatefulWidget {
   const WhatsAppAdGeneratorScreen({super.key});
 
   @override
-  State<WhatsAppAdGeneratorScreen> createState() =>
-      _WhatsAppAdGeneratorScreenState();
+  State<WhatsAppAdGeneratorScreen> createState() => _WhatsAppAdGeneratorScreenState();
 }
 
 class _WhatsAppAdGeneratorScreenState extends State<WhatsAppAdGeneratorScreen> {
@@ -22,24 +22,33 @@ class _WhatsAppAdGeneratorScreenState extends State<WhatsAppAdGeneratorScreen> {
   @override
   void initState() {
     super.initState();
-    _initService();
+    final apiKey = dotenv.env['GEMINI_API_KEY'];
+    if (apiKey != null) aiService = MarketingAIService(apiKey);
   }
 
-  void _initService() {
-    final apiKey = dotenv.env['GEMINI_API_KEY']; // Changed name for clarity
-    if (apiKey != null && apiKey.isNotEmpty) {
-      aiService = MarketingAIService(apiKey);
+  // NEW: Function to open WhatsApp
+  Future<void> _shareToWhatsApp() async {
+    if (generatedAd == null) return;
+
+    // We encode the text so that spaces and emojis work in a URL
+    final message = Uri.encodeComponent(generatedAd!);
+    final whatsappUrl = "https://wa.me/?text=$message";
+    final uri = Uri.parse(whatsappUrl);
+
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Could not open WhatsApp")),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error launching WhatsApp: $e");
     }
   }
 
   void generateAd() async {
-    if (aiService == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("API Key not found in .env file")),
-      );
-      return;
-    }
-
     if (productController.text.isEmpty || descriptionController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill in required fields")),
@@ -64,7 +73,7 @@ class _WhatsAppAdGeneratorScreenState extends State<WhatsAppAdGeneratorScreen> {
       });
     } catch (e) {
       setState(() {
-        generatedAd = "Error: ${e.toString()}";
+        generatedAd = "Error: $e";
       });
     } finally {
       setState(() {
@@ -85,61 +94,61 @@ class _WhatsAppAdGeneratorScreenState extends State<WhatsAppAdGeneratorScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Card(
-              color: const Color(0xFF25D366).withOpacity(0.1),
-              child: const Padding(
-                padding: EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Icon(Icons.auto_awesome, size: 36, color: Color(0xFF25D366)),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text("Gemini AI powered ad generator"),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
+            // ... (Your existing input fields stay the same) ...
             TextField(
               controller: productController,
-              decoration: const InputDecoration(
-                  labelText: "Product/Service Name", border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: "Product Name", border: OutlineInputBorder()),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: descriptionController,
               maxLines: 3,
-              decoration: const InputDecoration(
-                  labelText: "Main Benefits/Description", border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: "Description", border: OutlineInputBorder()),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: priceController,
-              decoration: const InputDecoration(
-                  labelText: "Price (Optional)", border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: "Price", border: OutlineInputBorder()),
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
+
+            ElevatedButton.icon(
               onPressed: isLoading ? null : generateAd,
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text("Generate Ad with AI"),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF25D366),
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: isLoading 
-                ? const CircularProgressIndicator(color: Colors.white) 
-                : const Text("Generate WhatsApp Ad"),
             ),
+
+            if (isLoading) const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator())),
+
             if (generatedAd != null) ...[
               const SizedBox(height: 32),
-              const Text("Your Ad Result:", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              SelectableText(
-                generatedAd!,
-                style: const TextStyle(fontSize: 16, height: 1.4),
+              const Text("Ad Preview:", style: TextStyle(fontWeight: FontWeight.bold)),
+              Card(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(generatedAd!),
+                ),
               ),
-            ]
+              const SizedBox(height: 16),
+              
+              // NEW: The WhatsApp Share Button
+              ElevatedButton.icon(
+                onPressed: _shareToWhatsApp,
+                icon: const Icon(Icons.share),
+                label: const Text("Share directly to WhatsApp"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF075E54), // Darker WhatsApp Green
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ],
           ],
         ),
       ),

@@ -47,3 +47,8 @@
 	<true/>
 </dict>
 </plist>
+<key>LSApplicationQueriesSchemes</key>
+<array>
+  <string>https</string>
+  <string>http</string>
+</array>
