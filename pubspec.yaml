@@ -57,9 +57,6 @@ dependencies:
   google_sign_in: ^6.2.1
 
 
-  # speech to text
-  speech_to_text: ^6.6.0
-
   # google generative ai
   google_generative_ai: ^0.1.0
 
