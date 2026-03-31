@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import '../../services/auth_service.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -47,9 +47,14 @@ class HomeScreen extends StatelessWidget {
                       CircleAvatar(
                         radius: 24,
                         backgroundColor: Colors.white.withOpacity(0.2),
-                        child: const Icon(Icons.person, color: Colors.white),
-                      ),
-                    ],
+                        child: IconButton(
+                          icon: const Icon(Icons.logout, color: Colors.white),
+                          onPressed: () async {
+                            await AuthService().signOut();
+                            // AuthWrapper automatically navigates back to LoginScreen
+                          },
+                        ),
+                      ),                    ],
                   ),
                   const SizedBox(height: 16),
                   Text(

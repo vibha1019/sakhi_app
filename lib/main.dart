@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // NEW: dotenv import
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'config/theme.dart';
 import 'config/routes.dart';
 import 'providers/user_provider.dart';
 import 'providers/language_provider.dart';
+import 'firebase_options.dart';
+import 'screens/auth_wrapper.dart';
 
-Future<void> main() async {
-  // Ensure Flutter binding is initialized
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables from .env
   await dotenv.load(fileName: "assets/.env");
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   runApp(const MicroMitraApp());
 }
@@ -29,9 +34,10 @@ class MicroMitraApp extends StatelessWidget {
       child: MaterialApp(
         title: 'MicroMitra',
         theme: AppTheme.lightTheme,
-        initialRoute: '/',
-        routes: AppRoutes.routes,
         debugShowCheckedModeBanner: false,
+        // AuthWrapper replaces initialRoute — it decides login vs home
+        // Keep routes for named navigation elsewhere in the app
+        routes: AppRoutes.routes,
       ),
     );
   }

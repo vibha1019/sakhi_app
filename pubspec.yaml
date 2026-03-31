@@ -45,6 +45,17 @@ dependencies:
 
   # Charts for finance tracker
   fl_chart: ^0.66.0
+  firebase_core: ^3.6.0
+
+  # Authentication
+  firebase_auth: ^5.3.1
+
+  # Firestore (database)
+  cloud_firestore: ^5.4.3
+
+  # Optional: Google Sign-In
+  google_sign_in: ^6.2.1
+
 
   # speech to text
   speech_to_text: ^6.6.0
