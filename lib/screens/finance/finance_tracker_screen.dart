@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import '../../services/voice_transaction_parser.dart';
 import '../../models/transaction.dart';
 import '../../services/firestore_service.dart';
 
@@ -13,6 +13,21 @@ class FinanceTrackerScreen extends StatefulWidget {
 
 class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
   final FirestoreService _firestoreService = FirestoreService();
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+  final _voiceTextNotifier = ValueNotifier<String>('');
+  
+  @override
+  void initState() {
+    super.initState();
+    _speech = stt.SpeechToText();
+  }
+  @override
+  void dispose() {
+    _voiceTextNotifier.dispose();
+    super.dispose();
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -193,37 +208,57 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
 
                       // Voice Input Button (placeholder for now)
                       Card(
-                        color: const Color(0xFF6B4CE6).withOpacity(0.1),
+                        color: _isListening 
+                            ? const Color(0xFFFF6B9D).withOpacity(0.2)
+                            : const Color(0xFF6B4CE6).withOpacity(0.1),
                         child: InkWell(
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Voice input coming soon!'),
-                              ),
-                            );
-                          },
+                          onTap: _startVoiceInput,
                           child: Padding(
                             padding: const EdgeInsets.all(16),
                             child: Row(
                               children: [
-                                const Icon(Icons.mic,
-                                    color: Color(0xFF6B4CE6), size: 32),
+                                Icon(
+                                  _isListening ? Icons.mic : Icons.mic_none,
+                                  color: _isListening 
+                                      ? const Color(0xFFFF6B9D) 
+                                      : const Color(0xFF6B4CE6),
+                                  size: 32,
+                                ),
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'Try Voice Input',
+                                        _isListening 
+                                            ? 'Listening...' 
+                                            : 'Try Voice Input',
                                         style: Theme.of(context).textTheme.titleMedium,
                                       ),
-                                      Text(
-                                        'Say "I earned 200 rupees today"',
-                                        style: Theme.of(context).textTheme.bodySmall,
-                                      ),
+                                      ValueListenableBuilder<String>(
+                                          valueListenable: _voiceTextNotifier,
+                                          builder: (context, voiceText, _) {
+                                            return Text(
+                                              _isListening
+                                                  ? voiceText.isNotEmpty ? voiceText : 'Say something...'
+                                                  : 'Say "I earned 200 rupees today"',
+                                              style: Theme.of(context).textTheme.bodySmall,
+                                            );
+                                          },
+                                        ),
+
                                     ],
                                   ),
                                 ),
+                                if (_isListening)
+                                  SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: const Color(0xFFFF6B9D),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -397,6 +432,86 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
       ),
     );
   }
+void _startVoiceInput() async {
+  if (!_isListening) {
+    bool available = await _speech.initialize(
+      onStatus: (status) async {
+        if (status == 'done' && _voiceTextNotifier.value.isNotEmpty) {
+          if (mounted) setState(() => _isListening = false);
+          await _processVoiceInput(_voiceTextNotifier.value);
+        }
+      },
+      onError: (error) {
+        if (mounted) setState(() => _isListening = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${error.errorMsg}')),
+        );
+      },
+    );
+
+    if (available) {
+      setState(() {
+        _isListening = true;
+        _voiceTextNotifier.value = '';
+      });
+
+      _speech.listen(
+        onResult: (result) {
+          // No setState here — just update the notifier
+          _voiceTextNotifier.value = result.recognizedWords;
+        },
+        localeId: 'en-US',
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Speech recognition not available')),
+      );
+    }
+  } else {
+    setState(() => _isListening = false);
+    _speech.stop();
+  }
+}
+Future<void> _processVoiceInput(String voiceText) async {
+  try {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Processing...')),
+    );
+
+    final parser = VoiceTransactionParser();
+    final result = await parser.parseVoiceInput(voiceText);
+
+    if (result['success']) {
+      await _firestoreService.addTransaction(
+        Transaction(
+          type: result['type'] == 'income'
+              ? TransactionType.income
+              : TransactionType.expense,
+          amount: result['amount'],
+          description: result['description'],
+          date: DateTime.now(),
+        ),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✓ Added: ${result['description']} - ₹${result['amount']}',
+            ),
+            backgroundColor: const Color(0xFF06D6A0),
+          ),
+        );
+      }
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+}
 }
 
 class _TransactionItem extends StatelessWidget {
