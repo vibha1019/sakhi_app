@@ -1,4 +1,4 @@
-enum TransactionType { income, expense }  // ← must be in this file
+enum TransactionType { income, expense }
 
 class Transaction {
   final String? id;
