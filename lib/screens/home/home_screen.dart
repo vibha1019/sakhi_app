@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
-import '../../services/auth_service.dart';
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+import 'package:provider/provider.dart'; 
+import '../../providers/language_provider.dart';
 
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});  // ADD THIS
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>();
+    
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -29,14 +32,14 @@ class HomeScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Welcome back! 👋',
+                            '${lang.translate('welcome')} 👋',
                             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               color: Colors.white70,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'MicroMitra',
+                            lang.translate('micromitra'),
                             style: Theme.of(context).textTheme.displaySmall?.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -44,21 +47,22 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: Colors.white.withOpacity(0.2),
-                        child: IconButton(
-                          icon: const Icon(Icons.logout, color: Colors.white),
-                          onPressed: () async {
-                            await AuthService().signOut();
-                            // AuthWrapper automatically navigates back to LoginScreen
-                          },
-                        ),
-                      ),                    ],
+                      // Language Switcher
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.language, color: Colors.white),
+                        onSelected: (String lang) {
+                          context.read<LanguageProvider>().setLanguage(lang);
+                        },
+                        itemBuilder: (BuildContext context) => [
+                          const PopupMenuItem(value: 'en', child: Text('🇬🇧 English')),
+                          const PopupMenuItem(value: 'hi', child: Text('🇮🇳 हिन्दी')),
+                        ],
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Your Business Friend',
+                    lang.translate('your_business_friend'),
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Colors.white70,
                     ),
@@ -77,35 +81,29 @@ class HomeScreen extends StatelessWidget {
                   mainAxisSpacing: 16,
                   children: [
                     _FeatureCard(
-                      title: 'Pricing Calculator',
-                      description: 'Calculate fair prices for your products',
+                      title: lang.translate('pricing_calculator'),
+                      description: lang.translate('pricing_desc'),
                       icon: Icons.calculate,
                       color: const Color(0xFF6B4CE6),
-                      onTap: () {
-                        Navigator.pushNamed(context, '/pricing');
-                      },
+                      onTap: () => Navigator.pushNamed(context, '/pricing'),
                     ),
                     _FeatureCard(
-                      title: 'Marketing Tools',
-                      description: 'Create flyers and ads instantly',
+                      title: lang.translate('marketing_tools'),
+                      description: lang.translate('marketing_desc'),
                       icon: Icons.campaign,
                       color: const Color(0xFFFF6B9D),
-                      onTap: () {
-                        Navigator.pushNamed(context, '/marketing');
-                      },
+                      onTap: () => Navigator.pushNamed(context, '/marketing'),
                     ),
                     _FeatureCard(
-                      title: 'Finance Tracker',
-                      description: 'Track income and expenses',
+                      title: lang.translate('finance_tracker'),
+                      description: lang.translate('finance_desc'),
                       icon: Icons.account_balance_wallet,
                       color: const Color(0xFF06D6A0),
-                      onTap: () {
-                        Navigator.pushNamed(context, '/finance');
-                      },
+                      onTap: () => Navigator.pushNamed(context, '/finance'),
                     ),
                     _FeatureCard(
-                      title: 'Business Tips',
-                      description: 'Learn business strategies',
+                      title: lang.translate('business_tips'),
+                      description: lang.translate('tips_desc'),
                       icon: Icons.lightbulb,
                       color: const Color(0xFFFFB800),
                       onTap: () {
@@ -114,32 +112,12 @@ class HomeScreen extends StatelessWidget {
                         );
                       },
                     ),
-                    _FeatureCard(
-                      title: '🎤 Test Voice',
-                      description: 'Test voice input',
-                      icon: Icons.bug_report,
-                      color: Colors.orange,
-                      onTap: () {
-                        Navigator.pushNamed(context, '/voice-test');
-                      },
-                    ),
                   ],
                 ),
               ),
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // Voice assistant placeholder
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Voice assistant coming soon!')),
-          );
-        },
-        icon: const Icon(Icons.mic),
-        label: const Text('Ask Sakhi'),
-        backgroundColor: Theme.of(context).colorScheme.secondary,
       ),
     );
   }
