@@ -1,4 +1,138 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+
+// ── PUT YOUR API KEY HERE ──────────────────────
+const String apiKey = 'i will put it later';
+// ──────────────────────────────────────────────
+
+// ─────────────────────────────────────────────
+// THEME
+// ─────────────────────────────────────────────
+
+class AppColors {
+  static const ink = Color(0xFF1A1A2E);
+  static const inkLight = Color(0xFF2D2D44);
+  static const accent = Color(0xFF4F46E5);
+  static const accentSoft = Color(0xFFEEF2FF);
+  static const accentMid = Color(0xFFE0E7FF);
+  static const success = Color(0xFF059669);
+  static const successSoft = Color(0xFFECFDF5);
+  static const warn = Color(0xFFD97706);
+  static const warnSoft = Color(0xFFFFFBEB);
+  static const surface = Color(0xFFFFFFFF);
+  static const surfaceAlt = Color(0xFFF8F7FF);
+  static const border = Color(0xFFE8E8F0);
+  static const textPrimary = Color(0xFF1A1A2E);
+  static const textSecondary = Color(0xFF6B7280);
+  static const textHint = Color(0xFF9CA3AF);
+}
+
+// ─────────────────────────────────────────────
+// DATA MODELS
+// ─────────────────────────────────────────────
+
+class AiPricingSuggestion {
+  final double minimum;
+  final double recommended;
+  final double premium;
+  final String reasoning;
+  final List<String> factors;
+
+  const AiPricingSuggestion({
+    required this.minimum,
+    required this.recommended,
+    required this.premium,
+    required this.reasoning,
+    required this.factors,
+  });
+
+  factory AiPricingSuggestion.fromJson(Map<String, dynamic> json) {
+    return AiPricingSuggestion(
+      minimum: (json['minimum'] as num).toDouble(),
+      recommended: (json['recommended'] as num).toDouble(),
+      premium: (json['premium'] as num).toDouble(),
+      reasoning: json['reasoning'] as String,
+      factors: List<String>.from(json['factors'] as List),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// AI SERVICE
+// ─────────────────────────────────────────────
+
+class AiPricingService {
+  static const _endpoint = 'https://api.openai.com/v1/chat/completions';
+  static const _model = 'gpt-4o';
+
+  static Future<AiPricingSuggestion> getSuggestion({
+    required String productType,
+    required String location,
+    required String qualityTier,
+    required double materialCost,
+    required double laborCost,
+    required double totalCost,
+  }) async {
+    final prompt = '''
+You are a pricing expert for small businesses and artisans in India.
+
+Given the following details, suggest a fair price range in Indian Rupees (₹).
+
+Product/Service: $productType
+Location: $location
+Quality tier: $qualityTier
+Material cost: ₹${materialCost.toStringAsFixed(2)}
+Labor cost: ₹${laborCost.toStringAsFixed(2)}
+Total calculated cost (materials + labor + overhead): ₹${totalCost.toStringAsFixed(2)}
+
+Respond ONLY with a valid JSON object — no markdown, no explanation outside JSON.
+
+Format:
+{
+  "minimum": <number — lowest viable price, must cover all costs>,
+  "recommended": <number — fair market price for this quality tier and location>,
+  "premium": <number — price for a premium/luxury positioning>,
+  "reasoning": "<2-3 sentences explaining why these prices are appropriate>",
+  "factors": ["<factor 1>", "<factor 2>", "<factor 3>"]
+}
+
+All prices in ₹. Be realistic for the Indian market and the specified location.
+''';
+
+    final response = await http.post(
+      Uri.parse(_endpoint),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $apiKey',
+      },
+      body: jsonEncode({
+        'model': _model,
+        'max_tokens': 512,
+        'messages': [
+          {'role': 'system', 'content': 'You are a pricing expert. Always respond with valid JSON only.'},
+          {'role': 'user', 'content': prompt},
+        ],
+        'response_format': {'type': 'json_object'},
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('API error ${response.statusCode}: ${response.body}');
+    }
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final content = (body['choices'] as List).first['message']['content'] as String;
+    final clean = content.replaceAll(RegExp(r'```json|```'), '').trim();
+    final json = jsonDecode(clean) as Map<String, dynamic>;
+    return AiPricingSuggestion.fromJson(json);
+  }
+}
+
+// ─────────────────────────────────────────────
+// MAIN SCREEN
+// ─────────────────────────────────────────────
 
 class PricingCalculatorScreen extends StatefulWidget {
   const PricingCalculatorScreen({super.key});
@@ -7,14 +141,38 @@ class PricingCalculatorScreen extends StatefulWidget {
   State<PricingCalculatorScreen> createState() => _PricingCalculatorScreenState();
 }
 
-class _PricingCalculatorScreenState extends State<PricingCalculatorScreen> {
+class _PricingCalculatorScreenState extends State<PricingCalculatorScreen>
+    with SingleTickerProviderStateMixin {
+  // Step tracking
+  int _currentStep = 0;
+
+  // Controllers
   final _materialCostController = TextEditingController();
   final _laborHoursController = TextEditingController();
   final _hourlyRateController = TextEditingController(text: '50');
   final _overheadPercentController = TextEditingController(text: '20');
   final _profitMarginController = TextEditingController(text: '20');
-  
+  final _productTypeController = TextEditingController();
+  final _locationController = TextEditingController();
+
+  String _selectedQuality = 'Standard';
+  static const _qualityOptions = ['Budget', 'Standard', 'Premium', 'Luxury'];
+
   Map<String, double>? _breakdown;
+  AiPricingSuggestion? _aiSuggestion;
+  bool _isAiLoading = false;
+  String? _aiError;
+
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _fadeController = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
+    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _fadeController.forward();
+  }
 
   @override
   void dispose() {
@@ -23,24 +181,33 @@ class _PricingCalculatorScreenState extends State<PricingCalculatorScreen> {
     _hourlyRateController.dispose();
     _overheadPercentController.dispose();
     _profitMarginController.dispose();
+    _productTypeController.dispose();
+    _locationController.dispose();
+    _fadeController.dispose();
     super.dispose();
   }
 
-  void _calculatePrice() {
+  void _goToStep(int step) {
+    _fadeController.reverse().then((_) {
+      setState(() => _currentStep = step);
+      _fadeController.forward();
+    });
+  }
+
+  void _calculateAndNext() {
     final materialCost = double.tryParse(_materialCostController.text) ?? 0;
     final laborHours = double.tryParse(_laborHoursController.text) ?? 0;
     final hourlyRate = double.tryParse(_hourlyRateController.text) ?? 50;
     final overheadPercent = double.tryParse(_overheadPercentController.text) ?? 20;
     final profitMargin = double.tryParse(_profitMarginController.text) ?? 20;
-    
-    // Calculate each component
+
     final laborCost = laborHours * hourlyRate;
     final directCosts = materialCost + laborCost;
     final overheadAmount = directCosts * (overheadPercent / 100);
     final totalCosts = directCosts + overheadAmount;
     final profitAmount = totalCosts * (profitMargin / 100);
     final finalPrice = totalCosts + profitAmount;
-    
+
     setState(() {
       _breakdown = {
         'materialCost': materialCost,
@@ -52,344 +219,65 @@ class _PricingCalculatorScreenState extends State<PricingCalculatorScreen> {
         'finalPrice': finalPrice,
       };
     });
+    _goToStep(1);
+  }
+
+  Future<void> _getAiSuggestion() async {
+    if (_productTypeController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a product or service type'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final materialCost = double.tryParse(_materialCostController.text) ?? 0;
+    final laborHours = double.tryParse(_laborHoursController.text) ?? 0;
+    final hourlyRate = double.tryParse(_hourlyRateController.text) ?? 50;
+    final overheadPercent = double.tryParse(_overheadPercentController.text) ?? 20;
+    final laborCost = laborHours * hourlyRate;
+    final directCosts = materialCost + laborCost;
+    final totalCost = directCosts * (1 + overheadPercent / 100);
+
+    setState(() {
+      _isAiLoading = true;
+      _aiError = null;
+      _aiSuggestion = null;
+    });
+
+    try {
+      final suggestion = await AiPricingService.getSuggestion(
+        productType: _productTypeController.text.trim(),
+        location: _locationController.text.trim().isEmpty ? 'India' : _locationController.text.trim(),
+        qualityTier: _selectedQuality,
+        materialCost: materialCost,
+        laborCost: laborCost,
+        totalCost: totalCost,
+      );
+      setState(() => _aiSuggestion = suggestion);
+      _goToStep(2);
+    } catch (e) {
+      setState(() => _aiError = e.toString());
+    } finally {
+      setState(() => _isAiLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Pricing Calculator'),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+      backgroundColor: AppColors.surfaceAlt,
+      body: SafeArea(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header Card
-            Card(
-              color: const Color(0xFF6B4CE6).withOpacity(0.1),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.calculate,
-                      size: 40,
-                      color: const Color(0xFF6B4CE6),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Calculate Fair Prices',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Never undercharge again!',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Material Cost Input
-            TextField(
-              controller: _materialCostController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Material Cost',
-                hintText: 'Enter cost of materials in ₹',
-                prefixIcon: Icon(Icons.shopping_bag),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Labor Hours Input
-            TextField(
-              controller: _laborHoursController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Labor Hours',
-                hintText: 'How many hours did it take?',
-                prefixIcon: Icon(Icons.access_time),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Hourly Rate Input
-            TextField(
-              controller: _hourlyRateController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Your Hourly Rate (₹)',
-                hintText: 'How much per hour for your work?',
-                prefixIcon: Icon(Icons.currency_rupee),
-                helperText: 'Your time is valuable! This is what you earn per hour.',
-                helperMaxLines: 2,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Overhead Percentage Input
-            TextField(
-              controller: _overheadPercentController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Overhead (%)',
-                hintText: 'Extra costs like rent, electricity',
-                prefixIcon: Icon(Icons.home_work),
-                helperText: 'Your business costs: rent, electricity, tools. Usually 15-25%.',
-                helperMaxLines: 2,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Profit Margin Input
-            TextField(
-              controller: _profitMarginController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Profit Margin (%)',
-                hintText: 'Your earnings after all costs',
-                prefixIcon: Icon(Icons.trending_up),
-                helperText: 'This is YOUR profit to keep and grow your business. Usually 20-40%.',
-                helperMaxLines: 2,
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Calculate Button
-            ElevatedButton.icon(
-              onPressed: _calculatePrice,
-              icon: const Icon(Icons.calculate),
-              label: const Text('Calculate Price'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Result Card with Breakdown
-            if (_breakdown != null) ...[
-              Card(
-                color: const Color(0xFF06D6A0).withOpacity(0.1),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.check_circle,
-                        size: 60,
-                        color: const Color(0xFF06D6A0),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Final Price to Charge',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '₹${_breakdown!['finalPrice']!.toStringAsFixed(2)}',
-                        style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                          color: const Color(0xFF06D6A0),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Detailed Breakdown Card
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.receipt_long,
-                            color: const Color(0xFF6B4CE6),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Price Breakdown',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Understanding where your money goes:',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      _BreakdownItem(
-                        title: 'Material Cost',
-                        amount: _breakdown!['materialCost']!,
-                        description: 'What you spent on supplies and materials',
-                        icon: Icons.shopping_bag,
-                        color: Colors.blue,
-                      ),
-                      const SizedBox(height: 12),
-
-                      _BreakdownItem(
-                        title: 'Labor Cost',
-                        amount: _breakdown!['laborCost']!,
-                        description: 'Payment for your time and skills (${_laborHoursController.text} hours × ₹${_hourlyRateController.text}/hour)',
-                        icon: Icons.person_outline,
-                        color: Colors.orange,
-                      ),
-                      const SizedBox(height: 12),
-
-                      Divider(),
-                      _BreakdownItem(
-                        title: 'Direct Costs',
-                        amount: _breakdown!['directCosts']!,
-                        description: 'Materials + Labor = Basic costs',
-                        icon: Icons.calculate,
-                        color: Colors.grey,
-                        isBold: true,
-                      ),
-                      const SizedBox(height: 12),
-
-                      _BreakdownItem(
-                        title: 'Overhead',
-                        amount: _breakdown!['overheadAmount']!,
-                        description: 'Business expenses: rent, electricity, tools (${_overheadPercentController.text}%)',
-                        icon: Icons.home_work,
-                        color: Colors.purple,
-                      ),
-                      const SizedBox(height: 12),
-
-                      Divider(),
-                      _BreakdownItem(
-                        title: 'Total Costs',
-                        amount: _breakdown!['totalCosts']!,
-                        description: 'All expenses combined',
-                        icon: Icons.assignment,
-                        color: Colors.grey,
-                        isBold: true,
-                      ),
-                      const SizedBox(height: 12),
-
-                      _BreakdownItem(
-                        title: 'Your Profit',
-                        amount: _breakdown!['profitAmount']!,
-                        description: 'Money YOU keep after all costs (${_profitMarginController.text}%)',
-                        icon: Icons.savings,
-                        color: const Color(0xFF06D6A0),
-                        isBold: true,
-                      ),
-                      const SizedBox(height: 16),
-
-                      Divider(thickness: 2),
-                      const SizedBox(height: 8),
-                      
-                      _BreakdownItem(
-                        title: 'FINAL PRICE',
-                        amount: _breakdown!['finalPrice']!,
-                        description: 'This is what you should charge the customer',
-                        icon: Icons.monetization_on,
-                        color: const Color(0xFF06D6A0),
-                        isBold: true,
-                        isLarge: true,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Profit Explanation Card
-              Card(
-                color: Colors.green.withOpacity(0.1),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.stars,
-                            color: Colors.green[700],
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Why This Price is Fair',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: Colors.green[700],
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _ExplanationPoint('✓ Covers all your material costs'),
-                      _ExplanationPoint('✓ Pays you fairly for your time and skills'),
-                      _ExplanationPoint('✓ Includes business running costs'),
-                      _ExplanationPoint('✓ Gives you profit to save and grow'),
-                      const SizedBox(height: 8),
-                      Text(
-                        'If you charge less than ₹${_breakdown!['finalPrice']!.toStringAsFixed(2)}, you are losing money!',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.red[700],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 24),
-
-            // Tips Card
-            Card(
-              color: const Color(0xFFFFB800).withOpacity(0.1),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.lightbulb,
-                          color: const Color(0xFFFFB800),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Pricing Tips',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _TipItem('Include ALL costs: materials, time, overhead'),
-                    _TipItem('Don\'t forget to value your time!'),
-                    _TipItem('Check competitor prices in your area'),
-                    _TipItem('Adjust based on your experience level'),
-                    _TipItem('More experience = you can charge higher hourly rates'),
-                  ],
-                ),
+            _buildTopBar(),
+            _buildProgressBar(),
+            Expanded(
+              child: FadeTransition(
+                opacity: _fadeAnim,
+                child: _buildCurrentStep(),
               ),
             ),
           ],
@@ -397,22 +285,576 @@ class _PricingCalculatorScreenState extends State<PricingCalculatorScreen> {
       ),
     );
   }
+
+  Widget _buildTopBar() {
+    final titles = ['Cost calculator', 'Your price', 'AI market insights'];
+    final subtitles = [
+      'Enter your costs below',
+      'Here\'s what you should charge',
+      'See how the market prices your work',
+    ];
+    return Container(
+      color: AppColors.surface,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+      child: Row(
+        children: [
+          if (_currentStep > 0)
+            GestureDetector(
+              onTap: () => _goToStep(_currentStep - 1),
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: const Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: AppColors.textPrimary),
+              ),
+            )
+          else
+            const SizedBox(width: 36),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(titles[_currentStep], style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textPrimary, letterSpacing: -0.3)),
+                Text(subtitles[_currentStep], style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressBar() {
+    return Container(
+      color: AppColors.surface,
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      child: Row(
+        children: List.generate(3, (i) {
+          final active = i <= _currentStep;
+          return Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(right: i < 2 ? 6 : 0),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                height: 3,
+                decoration: BoxDecoration(
+                  color: active ? AppColors.accent : AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildCurrentStep() {
+    switch (_currentStep) {
+      case 0:
+        return _buildStep0();
+      case 1:
+        return _buildStep1();
+      case 2:
+        return _buildStep2();
+      default:
+        return _buildStep0();
+    }
+  }
+
+  // ── STEP 0: Cost Inputs ──────────────────────────
+
+  Widget _buildStep0() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildSectionLabel('What are your costs?'),
+          const SizedBox(height: 12),
+          _buildInputCard([
+            _InputRow(controller: _materialCostController, label: 'Material cost', prefix: '₹', hint: '0', keyboardType: TextInputType.number),
+          ]),
+          const SizedBox(height: 16),
+          _buildSectionLabel('Your time'),
+          const SizedBox(height: 12),
+          _buildInputCard([
+            _InputRow(controller: _laborHoursController, label: 'Hours worked', hint: '0', suffix: 'hrs', keyboardType: TextInputType.number),
+            _InputRow(controller: _hourlyRateController, label: 'Your hourly rate', prefix: '₹', hint: '50', suffix: '/hr', keyboardType: TextInputType.number),
+          ]),
+          const SizedBox(height: 16),
+          _buildSectionLabel('Business costs'),
+          const SizedBox(height: 12),
+          _buildInputCard([
+            _InputRow(controller: _overheadPercentController, label: 'Overhead', hint: '20', suffix: '%', keyboardType: TextInputType.number, helpText: 'Rent, electricity, tools — usually 15–25%'),
+            _InputRow(controller: _profitMarginController, label: 'Profit margin', hint: '20', suffix: '%', keyboardType: TextInputType.number, helpText: 'Your take-home after all costs — aim for 20–40%'),
+          ]),
+          const SizedBox(height: 28),
+          _PrimaryButton(
+            label: 'Calculate my price',
+            onPressed: _calculateAndNext,
+          ),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  // ── STEP 1: Results ──────────────────────────────
+
+  Widget _buildStep1() {
+    final b = _breakdown!;
+    final price = b['finalPrice']!;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Hero price
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+            decoration: BoxDecoration(
+              color: AppColors.accent,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              children: [
+                const Text('Charge this amount', style: TextStyle(fontSize: 13, color: Colors.white70, letterSpacing: 0.3)),
+                const SizedBox(height: 8),
+                Text(
+                  '₹${price.toStringAsFixed(0)}',
+                  style: const TextStyle(fontSize: 52, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -2),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'includes your profit of ₹${b['profitAmount']!.toStringAsFixed(0)}',
+                  style: const TextStyle(fontSize: 13, color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Breakdown
+          _buildSectionLabel('Where does the money go?'),
+          const SizedBox(height: 12),
+          _buildCard(
+            child: Column(
+              children: [
+                _BreakdownRow(label: 'Materials', amount: b['materialCost']!, color: const Color(0xFF3B82F6)),
+                _BreakdownRow(label: 'Your labor', amount: b['laborCost']!, color: const Color(0xFF8B5CF6)),
+                _BreakdownRow(label: 'Overhead', amount: b['overheadAmount']!, color: const Color(0xFFEC4899)),
+                const _DividerRow(),
+                _BreakdownRow(label: 'Total costs', amount: b['totalCosts']!, isBold: true, color: AppColors.textSecondary),
+                _BreakdownRow(label: 'Your profit', amount: b['profitAmount']!, isBold: true, color: AppColors.success),
+                const _DividerRow(),
+                _BreakdownRow(label: 'Final price', amount: b['finalPrice']!, isBold: true, isLarge: true, color: AppColors.accent),
+              ],
+            ),
+          ),
+          const SizedBox(height: 28),
+
+          _buildSectionLabel('Want to check the market rate?'),
+          const SizedBox(height: 12),
+
+          // AI inputs
+          _buildCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(color: AppColors.accentMid, borderRadius: BorderRadius.circular(6)),
+                      child: const Text('AI', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.accent)),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text('AI market comparison', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _PlainTextField(controller: _productTypeController, label: 'What are you selling?', hint: 'e.g. handmade bag, pottery, tailoring'),
+                const SizedBox(height: 12),
+                _PlainTextField(controller: _locationController, label: 'Your city or region', hint: 'e.g. Mumbai, Jaipur, rural Karnataka'),
+                const SizedBox(height: 16),
+                const Text('Quality tier', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                const SizedBox(height: 8),
+                _QualitySelector(
+                  selected: _selectedQuality,
+                  options: _qualityOptions,
+                  onChanged: (v) => setState(() => _selectedQuality = v),
+                ),
+              ],
+            ),
+          ),
+
+          if (_aiError != null) ...[
+            const SizedBox(height: 12),
+            _ErrorBanner(message: 'Could not get AI suggestions. Check your API key and connection.'),
+          ],
+
+          const SizedBox(height: 16),
+          _PrimaryButton(
+            label: _isAiLoading ? 'Getting AI insights…' : 'Get AI market insights',
+            onPressed: _isAiLoading ? null : _getAiSuggestion,
+            loading: _isAiLoading,
+            icon: Icons.auto_awesome_rounded,
+          ),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  // ── STEP 2: AI Results ───────────────────────────
+
+  Widget _buildStep2() {
+    final s = _aiSuggestion!;
+    final myPrice = _breakdown?['finalPrice'];
+
+    String comparisonText = '';
+    Color comparisonColor = AppColors.success;
+    if (myPrice != null) {
+      if (myPrice < s.minimum) {
+        comparisonText = 'Your calculated price is below the market minimum — consider charging more.';
+        comparisonColor = AppColors.warn;
+      } else if (myPrice > s.premium) {
+        comparisonText = 'Your price is above the premium tier — make sure the quality justifies it.';
+        comparisonColor = AppColors.accent;
+      } else {
+        comparisonText = 'Your price is within the healthy market range.';
+        comparisonColor = AppColors.success;
+      }
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Context chip
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(color: AppColors.accentSoft, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.accentMid)),
+            child: Text(
+              '${_productTypeController.text}  ·  ${_locationController.text.isEmpty ? 'India' : _locationController.text}  ·  $_selectedQuality quality',
+              style: const TextStyle(fontSize: 12, color: AppColors.accent, fontWeight: FontWeight.w500),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Three tiers
+          _buildSectionLabel('Market price range'),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _TierCard(label: 'Minimum', amount: s.minimum, accentColor: const Color(0xFFD97706), bgColor: const Color(0xFFFFFBEB))),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _TierCard(
+                  label: 'Recommended',
+                  amount: s.recommended,
+                  accentColor: AppColors.success,
+                  bgColor: AppColors.successSoft,
+                  highlighted: true,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: _TierCard(label: 'Premium', amount: s.premium, accentColor: AppColors.accent, bgColor: AppColors.accentSoft)),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Your price vs market
+          if (myPrice != null) ...[
+            _buildCard(
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(color: comparisonColor, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Your calculated price: ₹${myPrice.toStringAsFixed(0)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                        const SizedBox(height: 2),
+                        Text(comparisonText, style: TextStyle(fontSize: 12, color: comparisonColor)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // Reasoning
+          _buildSectionLabel('Why these prices'),
+          const SizedBox(height: 12),
+          _buildCard(
+            child: Text(s.reasoning, style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, height: 1.55)),
+          ),
+          const SizedBox(height: 16),
+
+          // Factors
+          _buildSectionLabel('Factors considered'),
+          const SizedBox(height: 12),
+          _buildCard(
+            child: Column(
+              children: s.factors.map((f) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.check_rounded, size: 16, color: AppColors.success),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(f, style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.4))),
+                  ],
+                ),
+              )).toList(),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+          OutlinedButton.icon(
+            onPressed: () => _goToStep(0),
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: const Text('Start a new calculation'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.textSecondary,
+              side: const BorderSide(color: AppColors.border),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  // ── Shared helpers ───────────────────────────────
+
+  Widget _buildSectionLabel(String text) {
+    return Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary, letterSpacing: 0.2));
+  }
+
+  Widget _buildInputCard(List<_InputRow> rows) {
+    return _buildCard(
+      child: Column(
+        children: rows.asMap().entries.map((e) {
+          final isLast = e.key == rows.length - 1;
+          return Column(
+            children: [
+              e.value,
+              if (!isLast) const Divider(height: 24, color: AppColors.border),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildCard({required Widget child, EdgeInsets? padding}) {
+    return Container(
+      padding: padding ?? const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border, width: 0.8),
+      ),
+      child: child,
+    );
+  }
 }
 
-class _BreakdownItem extends StatelessWidget {
-  final String title;
+// ─────────────────────────────────────────────
+// INPUT ROW
+// ─────────────────────────────────────────────
+
+class _InputRow extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final String hint;
+  final String? prefix;
+  final String? suffix;
+  final String? helpText;
+  final TextInputType keyboardType;
+
+  const _InputRow({
+    required this.controller,
+    required this.label,
+    required this.hint,
+    this.prefix,
+    this.suffix,
+    this.helpText,
+    this.keyboardType = TextInputType.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, fontWeight: FontWeight.w500)),
+                  if (helpText != null) ...[
+                    const SizedBox(height: 2),
+                    Text(helpText!, style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            SizedBox(
+              width: 110,
+              child: TextField(
+                controller: controller,
+                keyboardType: keyboardType,
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  prefixText: prefix,
+                  suffixText: suffix,
+                  prefixStyle: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                  suffixStyle: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                  hintText: hint,
+                  hintStyle: const TextStyle(color: AppColors.textHint),
+                  filled: true,
+                  fillColor: AppColors.surfaceAlt,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border, width: 0.8)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border, width: 0.8)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.accent, width: 1.5)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// PLAIN TEXT FIELD
+// ─────────────────────────────────────────────
+
+class _PlainTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final String hint;
+
+  const _PlainTextField({required this.controller, required this.label, required this.hint});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            hintText: hint,
+            hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
+            filled: true,
+            fillColor: AppColors.surfaceAlt,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border, width: 0.8)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border, width: 0.8)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.accent, width: 1.5)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// QUALITY SELECTOR
+// ─────────────────────────────────────────────
+
+class _QualitySelector extends StatelessWidget {
+  final String selected;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+
+  const _QualitySelector({required this.selected, required this.options, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: options.map((tier) {
+        final isSelected = selected == tier;
+        return Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(right: tier != options.last ? 6 : 0),
+            child: GestureDetector(
+              onTap: () => onChanged(tier),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.accent : AppColors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: isSelected ? AppColors.accent : AppColors.border, width: isSelected ? 1.5 : 0.8),
+                ),
+                child: Text(
+                  tier,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                    color: isSelected ? Colors.white : AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// BREAKDOWN ROW
+// ─────────────────────────────────────────────
+
+class _BreakdownRow extends StatelessWidget {
+  final String label;
   final double amount;
-  final String description;
-  final IconData icon;
   final Color color;
   final bool isBold;
   final bool isLarge;
 
-  const _BreakdownItem({
-    required this.title,
+  const _BreakdownRow({
+    required this.label,
     required this.amount,
-    required this.description,
-    required this.icon,
     required this.color,
     this.isBold = false,
     this.isLarge = false,
@@ -420,47 +862,18 @@ class _BreakdownItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: isLarge ? 28 : 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-                    fontSize: isLarge ? 18 : null,
-                  ),
-                ),
-              ),
-              Text(
-                '₹${amount.toStringAsFixed(2)}',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                  fontSize: isLarge ? 20 : null,
-                ),
-              ),
-            ],
+          Container(width: 3, height: 14, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(label, style: TextStyle(fontSize: isLarge ? 15 : 14, fontWeight: isBold ? FontWeight.w600 : FontWeight.w400, color: AppColors.textPrimary)),
           ),
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 28),
-            child: Text(
-              description,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey[700],
-              ),
-            ),
+          Text(
+            '₹${amount.toStringAsFixed(0)}',
+            style: TextStyle(fontSize: isLarge ? 17 : 14, fontWeight: isBold ? FontWeight.w700 : FontWeight.w500, color: color),
           ),
         ],
       ),
@@ -468,42 +881,124 @@ class _BreakdownItem extends StatelessWidget {
   }
 }
 
-class _ExplanationPoint extends StatelessWidget {
-  final String text;
-
-  const _ExplanationPoint(this.text);
+class _DividerRow extends StatelessWidget {
+  const _DividerRow();
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.bodyMedium,
+    return const Divider(height: 16, color: AppColors.border);
+  }
+}
+
+// ─────────────────────────────────────────────
+// TIER CARD
+// ─────────────────────────────────────────────
+
+class _TierCard extends StatelessWidget {
+  final String label;
+  final double amount;
+  final Color accentColor;
+  final Color bgColor;
+  final bool highlighted;
+
+  const _TierCard({
+    required this.label,
+    required this.amount,
+    required this.accentColor,
+    required this.bgColor,
+    this.highlighted = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accentColor.withOpacity(highlighted ? 0.5 : 0.2), width: highlighted ? 1.5 : 0.8),
+      ),
+      child: Column(
+        children: [
+          if (highlighted) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: accentColor, borderRadius: BorderRadius.circular(6)),
+              child: const Text('Best', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(height: 6),
+          ],
+          Text(label, style: TextStyle(fontSize: 11, color: accentColor, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
+          const SizedBox(height: 4),
+          Text(
+            '₹${amount.toStringAsFixed(0)}',
+            style: TextStyle(fontSize: highlighted ? 19 : 16, fontWeight: FontWeight.w800, color: accentColor),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
 }
 
-class _TipItem extends StatelessWidget {
-  final String text;
+// ─────────────────────────────────────────────
+// PRIMARY BUTTON
+// ─────────────────────────────────────────────
 
-  const _TipItem(this.text);
+class _PrimaryButton extends StatelessWidget {
+  final String label;
+  final VoidCallback? onPressed;
+  final bool loading;
+  final IconData? icon;
+
+  const _PrimaryButton({required this.label, required this.onPressed, this.loading = false, this.icon});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+    return SizedBox(
+      height: 52,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.accent,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: AppColors.accent.withOpacity(0.5),
+          disabledForegroundColor: Colors.white70,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        child: loading
+            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (icon != null) ...[Icon(icon, size: 18), const SizedBox(width: 8)],
+                  Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0.1)),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// ERROR BANNER
+// ─────────────────────────────────────────────
+
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+  const _ErrorBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: const Color(0xFFFFF1F2), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFFECACA))),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('• ', style: TextStyle(fontSize: 16)),
-          Expanded(
-            child: Text(
-              text,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
+          const Icon(Icons.error_outline_rounded, color: Color(0xFFE11D48), size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Text(message, style: const TextStyle(fontSize: 13, color: Color(0xFFBE123C)))),
         ],
       ),
     );
