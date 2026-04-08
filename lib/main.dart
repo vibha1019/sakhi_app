@@ -7,7 +7,6 @@ import 'config/routes.dart';
 import 'providers/user_provider.dart';
 import 'providers/language_provider.dart';
 import 'firebase_options.dart';
-import 'screens/auth_wrapper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
