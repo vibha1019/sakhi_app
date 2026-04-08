@@ -3,6 +3,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../services/voice_transaction_parser.dart';
 import '../../models/transaction.dart';
 import '../../services/firestore_service.dart';
+import 'income_expense_chart.dart';
 
 class FinanceTrackerScreen extends StatefulWidget {
   const FinanceTrackerScreen({super.key});
@@ -16,18 +17,18 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
   late stt.SpeechToText _speech;
   bool _isListening = false;
   final _voiceTextNotifier = ValueNotifier<String>('');
-  
+
   @override
   void initState() {
     super.initState();
     _speech = stt.SpeechToText();
   }
+
   @override
   void dispose() {
     _voiceTextNotifier.dispose();
     super.dispose();
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +71,7 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
           return SingleChildScrollView(
             child: Column(
               children: [
-                // Summary Cards
+                // ── Summary Section ──────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -88,14 +89,18 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
                             children: [
                               Text(
                                 'Current Balance',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      color: Colors.white70,
-                                    ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(color: Colors.white70),
                               ),
                               const SizedBox(height: 8),
                               Text(
                                 '₹${balance.toStringAsFixed(2)}',
-                                style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .displayLarge
+                                    ?.copyWith(
                                       color: Colors.white,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -106,7 +111,7 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Income & Expense Cards
+                      // Income & Expense Row
                       Row(
                         children: [
                           Expanded(
@@ -119,11 +124,16 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
                                         color: Color(0xFF06D6A0), size: 32),
                                     const SizedBox(height: 8),
                                     Text('Income',
-                                        style: Theme.of(context).textTheme.bodyMedium),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium),
                                     const SizedBox(height: 4),
                                     Text(
                                       '₹${totalIncome.toStringAsFixed(2)}',
-                                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge
+                                          ?.copyWith(
                                             color: const Color(0xFF06D6A0),
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -144,11 +154,16 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
                                         color: Color(0xFFE63946), size: 32),
                                     const SizedBox(height: 8),
                                     Text('Expenses',
-                                        style: Theme.of(context).textTheme.bodyMedium),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium),
                                     const SizedBox(height: 4),
                                     Text(
                                       '₹${totalExpense.toStringAsFixed(2)}',
-                                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge
+                                          ?.copyWith(
                                             color: const Color(0xFFE63946),
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -160,11 +175,15 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 16),
+
+                      // ✅ Chart — outside Row, full width, no unbounded constraints
+                      IncomeExpenseChart(transactions: transactions),
                     ],
                   ),
                 ),
 
-                // Transactions List
+                // ── Transactions List ─────────────────────────────────
                 Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(
@@ -195,20 +214,19 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
                           ),
                         ),
 
-                      // Transaction Items
                       ...transactions.map((transaction) {
                         return _TransactionItem(
                           transaction: transaction,
-                          onDelete: () =>
-                              _firestoreService.deleteTransaction(transaction.id!),
+                          onDelete: () => _firestoreService
+                              .deleteTransaction(transaction.id!),
                         );
                       }),
 
                       const SizedBox(height: 16),
 
-                      // Voice Input Button (placeholder for now)
+                      // Voice Input Card
                       Card(
-                        color: _isListening 
+                        color: _isListening
                             ? const Color(0xFFFF6B9D).withOpacity(0.2)
                             : const Color(0xFF6B4CE6).withOpacity(0.1),
                         child: InkWell(
@@ -218,45 +236,53 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
                             child: Row(
                               children: [
                                 Icon(
-                                  _isListening ? Icons.mic : Icons.mic_none,
-                                  color: _isListening 
-                                      ? const Color(0xFFFF6B9D) 
+                                  _isListening
+                                      ? Icons.mic
+                                      : Icons.mic_none,
+                                  color: _isListening
+                                      ? const Color(0xFFFF6B9D)
                                       : const Color(0xFF6B4CE6),
                                   size: 32,
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        _isListening 
-                                            ? 'Listening...' 
+                                        _isListening
+                                            ? 'Listening...'
                                             : 'Try Voice Input',
-                                        style: Theme.of(context).textTheme.titleMedium,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium,
                                       ),
                                       ValueListenableBuilder<String>(
-                                          valueListenable: _voiceTextNotifier,
-                                          builder: (context, voiceText, _) {
-                                            return Text(
-                                              _isListening
-                                                  ? voiceText.isNotEmpty ? voiceText : 'Say something...'
-                                                  : 'Say "I earned 200 rupees today"',
-                                              style: Theme.of(context).textTheme.bodySmall,
-                                            );
-                                          },
-                                        ),
-
+                                        valueListenable: _voiceTextNotifier,
+                                        builder: (context, voiceText, _) {
+                                          return Text(
+                                            _isListening
+                                                ? voiceText.isNotEmpty
+                                                    ? voiceText
+                                                    : 'Say something...'
+                                                : 'Say "I earned 200 rupees today"',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall,
+                                          );
+                                        },
+                                      ),
                                     ],
                                   ),
                                 ),
                                 if (_isListening)
-                                  SizedBox(
+                                  const SizedBox(
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: const Color(0xFFFF6B9D),
+                                      color: Color(0xFFFF6B9D),
                                     ),
                                   ),
                               ],
@@ -295,7 +321,6 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Income / Expense Toggle
               Row(
                 children: [
                   Expanded(
@@ -352,8 +377,6 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-
-              // Amount Field
               TextField(
                 controller: amountController,
                 keyboardType: TextInputType.number,
@@ -364,8 +387,6 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-
-              // Description Field
               TextField(
                 controller: descriptionController,
                 decoration: const InputDecoration(
@@ -389,18 +410,24 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
               onPressed: isLoading
                   ? null
                   : () async {
-                      final amount = double.tryParse(amountController.text.trim());
-                      final description = descriptionController.text.trim();
+                      final amount = double.tryParse(
+                          amountController.text.trim());
+                      final description =
+                          descriptionController.text.trim();
 
                       if (amount == null || amount <= 0) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please enter a valid amount')),
+                          const SnackBar(
+                              content:
+                                  Text('Please enter a valid amount')),
                         );
                         return;
                       }
                       if (description.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please enter a description')),
+                          const SnackBar(
+                              content:
+                                  Text('Please enter a description')),
                         );
                         return;
                       }
@@ -425,105 +452,121 @@ class _FinanceTrackerScreenState extends State<FinanceTrackerScreen> {
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2),
                     )
-                  : const Text('Save', style: TextStyle(color: Colors.white)),
+                  : const Text('Save',
+                      style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
       ),
     );
   }
-void _startVoiceInput() async {
-  if (!_isListening) {
-    bool available = await _speech.initialize(
-      onStatus: (status) async {
-        if (status == 'done' && _voiceTextNotifier.value.isNotEmpty) {
-          if (mounted) setState(() => _isListening = false);
-          await _processVoiceInput(_voiceTextNotifier.value);
-        }
-      },
-      onError: (error) {
-        if (mounted) setState(() => _isListening = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${error.errorMsg}')),
-        );
-      },
-    );
 
-    if (available) {
-      setState(() {
-        _isListening = true;
-        _voiceTextNotifier.value = '';
-      });
-
-      _speech.listen(
-        onResult: (result) {
-          // No setState here — just update the notifier
-          _voiceTextNotifier.value = result.recognizedWords;
+  void _startVoiceInput() async {
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (status) async {
+          if (status == 'done' &&
+              _voiceTextNotifier.value.isNotEmpty) {
+            if (mounted) setState(() => _isListening = false);
+            await _processVoiceInput(_voiceTextNotifier.value);
+          }
         },
-        localeId: 'en-US',
+        onError: (error) {
+          if (mounted) setState(() => _isListening = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: ${error.errorMsg}')),
+          );
+        },
       );
+
+      if (available) {
+        setState(() {
+          _isListening = true;
+          _voiceTextNotifier.value = '';
+        });
+        _speech.listen(
+          onResult: (result) {
+            _voiceTextNotifier.value = result.recognizedWords;
+          },
+          localeId: 'en-US',
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Speech recognition not available')),
+        );
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Speech recognition not available')),
-      );
+      setState(() => _isListening = false);
+      _speech.stop();
     }
-  } else {
-    setState(() => _isListening = false);
-    _speech.stop();
   }
-}
-Future<void> _processVoiceInput(String voiceText) async {
-  try {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Processing...')),
-    );
 
-    final parser = VoiceTransactionParser();
-    final result = await parser.parseVoiceInput(voiceText);
-
-    if (result['success']) {
-      await _firestoreService.addTransaction(
-        Transaction(
-          type: result['type'] == 'income'
-              ? TransactionType.income
-              : TransactionType.expense,
-          amount: result['amount'],
-          description: result['description'],
-          date: DateTime.now(),
-        ),
+  Future<void> _processVoiceInput(String voiceText) async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Processing...')),
       );
 
+      final parser = VoiceTransactionParser();
+      final result = await parser.parseVoiceInput(voiceText);
+
+      // ✅ null-safe checks before using result values
+      if (result['success'] == true &&
+          result['amount'] != null &&
+          result['description'] != null) {
+        await _firestoreService.addTransaction(
+          Transaction(
+            type: result['type'] == 'income'
+                ? TransactionType.income
+                : TransactionType.expense,
+            amount: (result['amount'] as num).toDouble(),
+            description: result['description'] as String,
+            date: DateTime.now(),
+          ),
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '✓ Added: ${result['description']} - ₹${result['amount']}',
+              ),
+              backgroundColor: const Color(0xFF06D6A0),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not understand. Please try again.'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '✓ Added: ${result['description']} - ₹${result['amount']}',
-            ),
-            backgroundColor: const Color(0xFF06D6A0),
-          ),
+          SnackBar(content: Text('Error: $e')),
         );
       }
     }
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
-    }
   }
-}
 }
 
 class _TransactionItem extends StatelessWidget {
   final Transaction transaction;
   final VoidCallback onDelete;
 
-  const _TransactionItem({required this.transaction, required this.onDelete});
+  const _TransactionItem(
+      {required this.transaction, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
     final isIncome = transaction.type == TransactionType.income;
-    final color = isIncome ? const Color(0xFF06D6A0) : const Color(0xFFE63946);
+    final color =
+        isIncome ? const Color(0xFF06D6A0) : const Color(0xFFE63946);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -554,9 +597,9 @@ class _TransactionItem extends StatelessWidget {
                 fontSize: 16,
               ),
             ),
-            // Swipe or long press to delete
             IconButton(
-              icon: Icon(Icons.delete_outline, color: Colors.grey[400], size: 20),
+              icon: Icon(Icons.delete_outline,
+                  color: Colors.grey[400], size: 20),
               onPressed: onDelete,
             ),
           ],
@@ -568,7 +611,9 @@ class _TransactionItem extends StatelessWidget {
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
-    if (difference.inHours < 1) return '${difference.inMinutes} minutes ago';
+    if (difference.inHours < 1) {
+      return '${difference.inMinutes} minutes ago';
+    }
     if (difference.inHours < 24) return '${difference.inHours} hours ago';
     if (difference.inDays < 7) return '${difference.inDays} days ago';
     return '${date.day}/${date.month}/${date.year}';

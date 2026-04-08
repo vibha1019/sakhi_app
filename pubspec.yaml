@@ -9,6 +9,7 @@ dependencies:
   flutter:
     sdk: flutter
   url_launcher: ^6.3.1  # Add this
+
   
   # API & Networking (Kept only one version)
   http: ^1.2.1
