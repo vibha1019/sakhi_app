@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:micromitra/screens/marketing/whatsapp_ad_generator_screen.dart';
-
+import 'package:micromitra/screens/marketing/flyer_generator_screen.dart'; // NEW IMPORT
 
 class MarketingGeneratorScreen extends StatelessWidget {
   const MarketingGeneratorScreen({super.key});
@@ -76,10 +76,11 @@ class MarketingGeneratorScreen extends StatelessWidget {
                   icon: Icons.article,
                   color: const Color(0xFFFF6B9D),
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content:
-                              Text('Flyer Generator - Coming soon!')),
+                    // NEW: Now navigates to the Flyer Generator
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const FlyerGeneratorScreen()),
                     );
                   },
                 ),
