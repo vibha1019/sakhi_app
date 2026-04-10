@@ -145,4 +145,82 @@ ${(specialOffer != null && specialOffer.isNotEmpty) ? specialOffer : "Ask us abo
 ${(contactInfo != null && contactInfo.isNotEmpty) ? contactInfo : "Visit us or call today!"}
     ''';
   }
+
+  // ==========================================
+  // SOCIAL MEDIA POST GENERATOR (NEW)
+  // ==========================================
+
+  Future<String> generateSocialMediaPost({
+    required String platform,
+    required String tone,
+    required String topic,
+    String? details,
+  }) async {
+    final url = Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey');
+
+    // Tailoring the length based on platform
+    String platformRules = "";
+    if (platform == 'X (Twitter)') {
+      platformRules = "Keep it under 280 characters. Use 1-2 trending hashtags.";
+    } else if (platform == 'LinkedIn') {
+      platformRules = "Format with line breaks. Keep it professional, insightful, and end with a question to drive engagement.";
+    } else if (platform == 'Instagram') {
+      platformRules = "Include engaging emojis. Add 5-10 relevant hashtags at the bottom.";
+    } else if (platform == 'TikTok') {
+      platformRules = "Write this as a short, punchy caption for a video. Include trending hashtags.";
+    }
+
+    final prompt = '''
+    Write a highly engaging social media post for $platform.
+
+    Topic: $topic
+    Tone: $tone
+    ${details != null && details.isNotEmpty ? 'Additional Details: $details' : ''}
+
+    Rules:
+    $platformRules
+    Make sure it grabs attention in the first line!
+    ''';
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "contents": [
+            {
+              "parts": [
+                {"text": prompt}
+              ]
+            }
+          ]
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['candidates'][0]['content']['parts'][0]['text'];
+      } else {
+        print("AI Quota hit or error for Social Media. Using Smart Fallback.");
+        return _generateSocialMediaSmartFallback(platform, topic, details);
+      }
+    } catch (e) {
+      return _generateSocialMediaSmartFallback(platform, topic, details);
+    }
+  }
+
+  // Smart fallback for Social Media generator
+  String _generateSocialMediaSmartFallback(String platform, String topic, String? details) {
+    return '''
+Check out our latest update about $topic! 🎉
+
+${details != null && details.isNotEmpty ? details : "We are so excited to share this with you all. Let us know what you think below!"}
+
+Drop a comment or DM us if you have any questions! 👇
+
+#$topic #BusinessUpdate #${platform.replaceAll(' ', '')} #Marketing
+    ''';
+  }
 }
+

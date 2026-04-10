@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:micromitra/screens/marketing/whatsapp_ad_generator_screen.dart';
 import 'package:micromitra/screens/marketing/flyer_generator_screen.dart'; // NEW IMPORT
+import 'package:micromitra/screens/marketing/social_media_post_screen.dart';
 
 class MarketingGeneratorScreen extends StatelessWidget {
   const MarketingGeneratorScreen({super.key});
@@ -89,13 +90,15 @@ class MarketingGeneratorScreen extends StatelessWidget {
                   icon: Icons.image,
                   color: const Color(0xFF6B4CE6),
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content:
-                              Text('Social Media Post Creator - Coming soon!')),
+                    // Navigate to the Social Media Creator
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const SocialMediaPostScreen()),
                     );
                   },
                 ),
+
                 _MarketingOption(
                   title: 'Product Photo',
                   icon: Icons.photo_camera,
