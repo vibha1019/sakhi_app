@@ -1,17 +1,45 @@
-MicroMitra – Source Code Instructions
+# MicroMitra – Source Code Instructions
 
-This project was built using Flutter.
-Key features include:
-AI Pricing Assistant (OpenAI GPT-4o)
-AI Marketing Generator (Google Gemini 1.5 Flash)
-Voice-Based Finance Tracker (speech-to-text + AI parsing)
+## Overview
+MicroMitra is a Flutter-based application designed to empower users with AI-driven tools for pricing, marketing, and financial tracking.
 
-How to run:
+## Key Features
 
-Install Flutter SDK
-Run flutter pub get
-Connect a device or emulator
-Run flutter run
+- **AI Pricing Assistant**  
+  Powered by OpenAI GPT-4o to help determine optimal product pricing.
 
-Note:
-API keys are not included for security reasons.
+- **AI Marketing Generator**  
+  Uses Google Gemini 1.5 Flash to generate marketing content.
+
+- **Voice-Based Finance Tracker**  
+  Combines speech-to-text with AI parsing to track finances through voice input.
+
+---
+
+## Getting Started
+
+### Prerequisites
+- Install the Flutter SDK  
+  https://docs.flutter.dev/get-started/install
+
+### Setup Instructions
+
+1. Clone the repository  
+2. Install dependencies:
+   ```bash
+   flutter pub get
+   ```
+3. Connect a device or start an emulator
+4. Run the application:
+   ```bash
+   flutter run
+   ```
+
+## Important Notes
+
+- API keys are **not included** for security reasons.
+- You will need to add your own API keys for:
+  - OpenAI (GPT-4o)
+  - Google Gemini
+
+---
