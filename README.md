@@ -1,16 +1,17 @@
-# sakhi_app
+MicroMitra – Source Code Instructions
 
-A new Flutter project.
+This project was built using Flutter.
+Key features include:
+AI Pricing Assistant (OpenAI GPT-4o)
+AI Marketing Generator (Google Gemini 1.5 Flash)
+Voice-Based Finance Tracker (speech-to-text + AI parsing)
 
-## Getting Started
+How to run:
 
-This project is a starting point for a Flutter application.
+Install Flutter SDK
+Run flutter pub get
+Connect a device or emulator
+Run flutter run
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Note:
+API keys are not included for security reasons.
